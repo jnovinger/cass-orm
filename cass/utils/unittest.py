@@ -5,18 +5,16 @@ from cass.models.db import Cassandra
 from pycassa import ConnectionPool, ColumnFamily
 
 
-#@override_settings(CASSANDRA_DB=settings.CASSANDRA_TEST_DB)
 class CassTestCase(TestCase):
-    pass
 
     def setUp(self):
-        # Use Test Database
-        Cassandra.Instance().db = ConnectionPool(
-            settings.CASSANDRA_TEST_DB,
-            settings.CASSANDRA_HOSTS
-        )
-        # Truncate known tables
+
+        if hasattr(settings, 'TRUNCATE_CFS'):
+            for cf in settings.TRUNCATE_CFS:
+                Cassandra.Instance().cf(cf).truncate()
+
         Cassandra.Instance().cf('users').truncate()
-        Cassandra.Instance().cf('user_streams').truncate()
+        Cassandra.Instance().cf('user_emails').truncate()
+        Cassandra.Instance().cf('user_friends').truncate()
 
         super(CassTestCase, self).setUp()

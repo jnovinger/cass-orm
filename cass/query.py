@@ -4,8 +4,6 @@ from thrift.Thrift import TApplicationException
 from models.db import Cassandra
 from fields import *
 import datetime
-import uuid
-
 
 class Query(object):
 
@@ -71,11 +69,36 @@ class Query(object):
         if all_data:
 
             models = [
-                self.set_fields(key, eval(data))
-                for key, data in all_data.items()
+
+                self.set_wide_fields(key, col_key, eval(data))
+                for col_key, data in all_data.items()
             ]
 
         return models
+
+    def set_wide_fields(self, row_key, column_key, data):
+        """
+        Create model instance from key, dict object returned by pycassa
+        """
+        model = self.model_class()
+
+        # set all fields to None
+        for field_name in model._fields.keys():
+            setattr(model, field_name, None)
+
+        # set key
+        setattr(model, 'key', row_key)
+        setattr(model, 'column_key', str(column_key))
+        setattr(model, model._key_field, row_key)
+
+        # set fields
+        for key, value in data.items():
+            for field_name, field_obj in model._fields.items():
+                if field_obj.uniq_field == key:
+                    setattr(model, field_name, value)
+                    break
+
+        return model
 
     def set_fields(self, key, data):
         """
@@ -88,6 +111,7 @@ class Query(object):
             setattr(model, field_name, None)
 
         # set key
+        setattr(model, 'key', key)
         setattr(model, model._key_field, key)
 
         # set fields
@@ -110,7 +134,6 @@ class Query(object):
         if key is None or (hasattr(key, 'value') and key.value is None):
             return None
 
-        model = self.model_class()
         cf = self.cass.cf(self.model_class._meta.family)
         try:
             data = cf.get(key,
@@ -133,11 +156,24 @@ class Query(object):
                                column_start=column_start, column_finish=column_finish)
 
         models = []
-
         for key, data in all_data.items():
             model = self.set_fields(key, data)
             models.append(model)
+        return models
 
+    def get_range(self, start="", finish="", columns=None, column_start="",
+                  column_finish="", column_reversed=False, column_count=100,
+                  row_count=None, include_timestamp=False,
+                  super_column=None, read_consistency_level=None,
+                  buffer_size=None, filter_empty=True):
+
+        cf = self.cass.cf(self.model_class._meta.family)
+
+        all_data = cf.get_range(row_count=row_count, columns=columns)
+        models = []
+        for key, data in all_data:
+            model = self.set_fields(key, data)
+            models.append(model)
         return models
 
 

@@ -42,7 +42,6 @@ class Cassandra:
             settings.CASSANDRA_DB,
             settings.CASSANDRA_HOSTS
         )
-
     def db(self):
         return self.db
 

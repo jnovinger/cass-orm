@@ -4,6 +4,8 @@ from cass.query import Query
 import datetime
 import uuid
 
+from dictshield.base import ShieldDocException, ShieldException
+
 
 class ColumnFamilyTypes(object):
     """
@@ -126,6 +128,12 @@ class Model(six.with_metaclass(ModelMetaClass)):
         if not self.column_key:
             raise ValueError("Wide table requires a column key")
 
+        try:
+            if isinstance(self.column_key, basestring):
+                self.column_key = uuid.UUID(self.column_key)
+        except ValueError:
+            print '-'
+
         self.objects.insert(str(key), {
             self.column_key: str(self.to_python())
         })
@@ -155,6 +163,13 @@ class Model(six.with_metaclass(ModelMetaClass)):
         Use this to serialise the object back into a dict object
         """
         data = {}
+
+        if hasattr(self, 'key'):
+            data['key'] = str(self.key)
+
+        if hasattr(self, 'column_key'):
+            data['column_key'] = str(self.column_key)
+
         for key, value in self._data.items():
             if isinstance(value, uuid.UUID):
                 value = str(value)
@@ -172,3 +187,46 @@ class Model(six.with_metaclass(ModelMetaClass)):
     @column_key.setter
     def column_key(self, column_name):
         self._column_key = column_name
+
+    def validate(self, validate_all=False):
+        """
+        Taken from dictshield
+        Ensure that all fields' values are valid and that
+        required fields are present.
+        Throws a ShieldDocException if Document is invalid
+        """
+        # Get a list of tuples of field names and their current values
+        fields = [(field, getattr(self, name))
+                  for name, field in self._fields.items()]
+
+        # Ensure that each field is matched to a valid value
+        errs = []
+        for field, value in fields:
+            err = None
+            # treat empty strings as nonexistent
+            if value is not None and value != '':
+                try:
+                    field._validate(value)
+                except ShieldException, e:
+                    err = e
+                except (ValueError, AttributeError, AssertionError):
+                    err = ShieldException('Invalid value',
+                                          field.field_name,
+                                          value)
+            elif field.required:
+                err = ShieldException('Required field missing',
+                                      field.field_name,
+                                      value)
+                # If validate_all, save errors to a list
+            # Otherwise, throw the first error
+            if err:
+                errs.append(err)
+            if err and not validate_all:
+                # NB: raising a ShieldDocException in this case would be more
+                # consistent, but existing code might expect ShieldException
+                raise err
+
+        if errs:
+            raise ShieldDocException(self._class_name, errs)
+        return True
+
