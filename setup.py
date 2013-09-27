@@ -15,7 +15,14 @@ setup(
     license = "Unknown",
     keywords = "cassandra pycassa django orm",
     url = "https://github.com/krone/cass-orm",
-    packages=['pycassa', 'thrift', 'django', 'dictshield'],
+    packages = [
+        'cass',
+        'cass.models',
+        'cass.fields',
+        'cass.query',
+        'cass.utils'
+    ],
+    install_requires=['pycassa', 'thrift', 'django', 'dictshield'],
     long_description=read('README.md'),
     classifiers=[
        "Framework :: Django",
