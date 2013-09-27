@@ -16,7 +16,7 @@ setup(
     keywords = "cassandra pycassa django orm",
     url = "https://github.com/krone/cass-orm",
     packages=['pycassa', 'thrift', 'django', 'dictshield'],
-    long_description=read('README'),
+    long_description=read('README.md'),
     classifiers=[
        "Framework :: Django",
        "Programming Language :: Python",
