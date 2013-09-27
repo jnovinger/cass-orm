@@ -18,9 +18,8 @@ setup(
     packages = [
         'cass',
         'cass.models',
-        'cass.fields',
-        'cass.query',
-        'cass.utils'
+        'cass.utils',
+        'cass.tests'
     ],
     install_requires=['pycassa', 'thrift', 'django', 'dictshield'],
     long_description=read('README.md'),
