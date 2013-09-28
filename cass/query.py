@@ -1,5 +1,6 @@
 import uuid
 from pycassa import NotFoundException
+from pycassa.index import *
 from thrift.Thrift import TApplicationException
 from models.db import Cassandra
 from fields import *
@@ -12,19 +13,28 @@ class Query(object):
         self.model_class = model_class
         self.cass = Cassandra.Instance()
 
-    def insert(self, key, row):
+
+    def insert(self, key, row, ttl=None):
         """
         Insert a new row. Idempotent, can be used for update as well
         """
         cf = self.cass.cf(self.model_class._meta.family)
-        cf.insert(key, row)
+        cf.insert(key, row, ttl=ttl)
 
     @property
-    def _columnfamily(self):
+    def cf(self):
         """
         Get the column family for the model
         """
-        return Cassandra.Instance().cf(self.cf)
+
+        return self.cass.cf(self.model_class._meta.family)
+
+    # @property
+    # def _columnfamily(self):
+    #     """
+    #     Get the column family for the model
+    #     """
+    #     return Cassandra.Instance().cf(self.cf)
 
     def exists(self, key=None):
         """
@@ -68,11 +78,18 @@ class Query(object):
 
         if all_data:
 
-            models = [
-
-                self.set_wide_fields(key, col_key, eval(data))
-                for col_key, data in all_data.items()
-            ]
+            for col_key, data in all_data.items():
+                try:
+                    if data == '':
+                        data = '{}'
+                    data = eval(data)
+                except ValueError:
+                    data={}
+                models.append(self.set_wide_fields(key, col_key, data))
+            # models = [
+            #     self.set_wide_fields(key, col_key, eval(data))
+            #     for col_key, data in all_data.items()
+            # ]
 
         return models
 
@@ -123,6 +140,31 @@ class Query(object):
 
         return model
 
+    """
+    This method imitates the get function, but uses secondary indexes instead.
+    """
+    def get_by_secondary_indexes(self,secondary_indexes):
+
+        cf = self.cass.cf(self.model_class._meta.family)
+
+        clauses = []
+        # create the index clause
+        for col_name, col_value in secondary_indexes.iteritems():
+            clauses.append(create_index_expression(col_name,col_value))
+        clause = create_index_clause(clauses,count=100)
+        rs = dict(cf.get_indexed_slices(clause))
+
+
+        if len(rs) > 1:
+            raise Exception("get_by_secondary index yielded more than one result. should not happen")
+        elif len(rs) == 0:
+            raise NotFoundException()
+        else:
+            key =  rs.iterkeys().next()
+            data = rs[key]
+            return self.set_fields(key,data)
+
+
     def get(self, key=None, columns=None, column_start="", column_finish="",
             column_reversed=False, column_count=100):
 
@@ -151,6 +193,25 @@ class Query(object):
                  column_reversed=False, column_count=100, include_timestamp=False,
                  super_column=None, read_consistency_level=None, buffer_size=None):
 
+        # check if we require UUIDS as keys
+
+        key_type = getattr(self.model_class, self.model_class._key_field, None)
+
+        if isinstance(key_type, UUIDField):
+            uuid_keys = []
+            for key in keys:
+                if not isinstance(key, uuid.UUID):
+
+                    try:
+                        key = uuid.UUID(key)
+                    except ValueError:
+                        key = None
+
+                if key:
+                    uuid_keys.append(key)
+
+            keys = uuid_keys
+
         cf = self.cass.cf(self.model_class._meta.family)
         all_data = cf.multiget(keys, columns=columns,
                                column_start=column_start, column_finish=column_finish)
@@ -176,6 +237,10 @@ class Query(object):
             models.append(model)
         return models
 
+    def get_count(self, colfam, key):
+        cf = ColumnFamily(self.db, colfam)
+        return cf.get_count(key)
+
 
     def check_columns_uuid(self, columns):
 
@@ -185,7 +250,9 @@ class Query(object):
         meta = self.model_class._meta
 
         # check if we need columns to be uuids
-        if isinstance(meta.column_key, UUIDField):
+        if hasattr(meta, 'column_key') and isinstance(meta.column_key, UUIDField):
+
+            # create list if not list
             if not isinstance(columns, list):
                 columns = [columns]
 
@@ -193,7 +260,9 @@ class Query(object):
 
             for col in columns:
                 if not isinstance(col, uuid.UUID):
-                    col_uuids.append(uuid.UUID(col))
+                    col = uuid.UUID(col)
+
+                col_uuids.append(col)
 
             columns = col_uuids
 

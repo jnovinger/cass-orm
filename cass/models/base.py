@@ -121,7 +121,7 @@ class Model(six.with_metaclass(ModelMetaClass)):
             if hasattr(self, key):
                 setattr(self, key, value)
 
-    def save_wide(self, key):
+    def save_wide(self, key, ttl=None):
         """
         Insert/updates a column into dynamic column family
         """
@@ -136,9 +136,9 @@ class Model(six.with_metaclass(ModelMetaClass)):
 
         self.objects.insert(str(key), {
             self.column_key: str(self.to_python())
-        })
+        }, ttl=ttl)
 
-    def save(self, cols=None):
+    def save(self, cols=None, ttl=None):
         """
         Insert/updates a row
         """
@@ -150,13 +150,13 @@ class Model(six.with_metaclass(ModelMetaClass)):
 
         if hasattr(self._meta, 'family_type') and \
                         self._meta.family_type == ColumnFamilyTypes.WIDE:
-            return self.save_wide(key)
+            return self.save_wide(key, ttl=ttl)
 
         row = self.to_python()
 
         if self._key_field in row:
             del row[self._key_field]
-        self.objects.insert(key, row)
+        self.objects.insert(key, row, ttl=ttl)
 
     def dict(self):
         """
@@ -180,13 +180,13 @@ class Model(six.with_metaclass(ModelMetaClass)):
                 data[key] = value
         return data
 
-    @property
-    def column_key(self):
-        return self._column_key
-
-    @column_key.setter
-    def column_key(self, column_name):
-        self._column_key = column_name
+    # @property
+    # def column_key(self):
+    #     return self._column_key
+    #
+    # @column_key.setter
+    # def column_key(self, column_name):
+    #     self._column_key = column_name
 
     def validate(self, validate_all=False):
         """

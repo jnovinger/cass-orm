@@ -72,9 +72,9 @@ class Cassandra:
         else:
             return cf.multiget(key)
 
-    def insert(self, colfam, key, data):
+    def insert(self, colfam, key, data, ttl=None):
         cf = ColumnFamily(self.db, colfam)
-        return cf.insert(key, data)
+        return cf.insert(key, data, ttl=ttl)
 
     def get_count(self, colfam, key):
         cf = ColumnFamily(self.db, colfam)
